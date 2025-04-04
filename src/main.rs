@@ -1,10 +1,13 @@
-use std::{f32::consts::PI, io::stdout};
+use std::{
+    f32::consts::PI,
+    io::{stdout, Write},
+};
 
 use anyhow::Result;
 use crossterm::{
     cursor::{Hide, MoveDown, MoveLeft, MoveTo, Show},
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseEventKind},
-    execute,
+    execute, queue,
     style::{Color, Print, ResetColor, SetBackgroundColor},
     terminal::{
         disable_raw_mode, enable_raw_mode, size, Clear, ClearType, DisableLineWrap, EnableLineWrap,
@@ -16,45 +19,70 @@ const SPEED: f32 = 0.25;
 pub struct LineSegment {
     pub slope: f32,
     pub intercept: f32,
-    pub start: f32,
-    pub end: f32,
+    pub start: (f32, f32),
+    pub end: (f32, f32),
     pub colour: Color,
 }
 
 impl LineSegment {
-    pub fn from_points(mut start: (f32, f32), mut end: (f32, f32), colour: Color) -> Self {
-        if start.0 > end.0 {
-            let temp = start;
-            start = end;
-            end = temp;
-        }
+    pub fn from_points(start: (f32, f32), end: (f32, f32), colour: Color) -> Self {
         let slope = (end.1 - start.1) / (end.0 - start.0);
         Self {
             slope,
             intercept: -slope * start.0 + start.1,
-            start: start.0,
-            end: end.0,
+            start,
+            end,
             colour,
         }
     }
 
-    pub fn ray(start: (f32, f32), slope: f32) -> Self {
+    pub fn ray(start: (f32, f32), angle: f32) -> Self {
+        let slope = angle.tan();
+        let end = (start.0 + 15.0 * angle.cos(), start.1 + 15.0 * angle.sin());
         Self {
             slope,
             intercept: -slope * start.0 + start.1,
-            start: start.0,
-            end: 0.0,
+            start,
+            end,
             colour: Color::White,
         }
     }
 
-    pub fn intersects(&self, other: &Self) -> Option<f32> {
+    pub fn intersects(&self, other: &Self) -> Option<(f32, f32)> {
+        if other.slope.is_infinite() {
+            if self.slope.is_infinite() {
+                if self.start.0 == other.start.0 {
+                    return Some((self.start.0, 0.0)); // same line
+                } else {
+                    return None;
+                }
+            }
+            if between(other.start.0, self.start.0, self.end.0)
+                && between(self.find_y(other.start.0), other.start.1, other.end.1)
+            {
+                return Some((other.start.0, self.find_y(other.start.0)));
+            }
+            return None;
+        }
+        if self.slope.is_infinite() {
+            return other.intersects(self);
+        }
         let intersection = (other.intercept - self.intercept) / (self.slope - other.slope);
-        return (self.start <= intersection && intersection <= self.end).then_some(intersection);
+        return (between(intersection, self.start.0, self.end.0)
+            && between(intersection, other.start.0, other.end.0))
+        .then(|| (intersection, self.find_y(intersection)));
     }
 
     pub fn find_y(&self, x: f32) -> f32 {
         self.slope * x + self.intercept
+    }
+}
+
+pub fn between(x: f32, a: f32, b: f32) -> bool {
+    if a < b {
+        (a..=b).contains(&x)
+    } else {
+        (b..=a).contains(&x)
     }
 }
 
@@ -88,25 +116,25 @@ fn render(
         *rotation = *rotation - 2.0 * PI;
     }
     for y in 0..=size.1 {
-        execute!(stdout(), MoveTo(0, y))?;
+        queue!(stdout(), MoveTo(0, y))?;
         if y > size.1 / 2 {
             for _ in 0..size.0 {
-                execute!(stdout(), SetBackgroundColor(Color::Blue), Print(" "))?;
+                queue!(stdout(), SetBackgroundColor(Color::Blue), Print(" "))?;
             }
         } else {
             for _ in 0..size.0 {
-                execute!(stdout(), SetBackgroundColor(Color::Red), Print(" "))?;
+                queue!(stdout(), SetBackgroundColor(Color::Red), Print(" "))?;
             }
         }
     }
     let d_theta = 0.5 * PI / size.0 as f32;
     for x in 0..size.0 {
-        let ray = LineSegment::ray(position, (*rotation - (x as f32 * d_theta)).tan());
+        let ray = LineSegment::ray(position, *rotation - (x as f32 * d_theta));
         let mut distance: Option<f32> = None;
         let mut colour = Color::White;
         for segment in segments.iter() {
             if let Some(point) = segment.intersects(&ray) {
-                let new_distance = get_distance(position, (point, segment.find_y(point)));
+                let new_distance = get_distance(position, point);
                 if distance.is_none() || distance > Some(new_distance) {
                     distance = Some(new_distance);
                     colour = segment.colour;
@@ -121,9 +149,9 @@ fn render(
             };
 
             let padding = (size.1 - height) / 2;
-            execute!(stdout(), MoveTo(x, padding))?;
+            queue!(stdout(), MoveTo(x, padding))?;
             for _ in 0..height {
-                execute!(
+                queue!(
                     stdout(),
                     SetBackgroundColor(colour),
                     Print(" "),
@@ -133,7 +161,7 @@ fn render(
             }
         }
     }
-    execute!(
+    queue!(
         stdout(),
         MoveTo(0, 0),
         Print(format!(
@@ -141,6 +169,7 @@ fn render(
             position.0, position.1, rotation
         ))
     )?;
+    stdout().flush()?;
     Ok(())
 }
 
@@ -154,9 +183,13 @@ fn main() -> Result<()> {
     execute!(stdout(), EnableMouseCapture, Hide, DisableLineWrap).unwrap();
 
     let segments = vec![
-        LineSegment::from_points((-2.0, -1.0), (1.0, 1.0), Color::Black),
-        LineSegment::from_points((1.0, 1.0), (0.0, 3.0), Color::Magenta),
-        LineSegment::from_points((0.0, 3.0), (-2.0, -1.0), Color::Green),
+        LineSegment::from_points((6.0, 1.0), (4.0, 3.0), Color::Black),
+        LineSegment::from_points((4.0, 3.0), (7.0, 5.0), Color::Magenta),
+        LineSegment::from_points((7.0, 5.0), (6.0, 1.0), Color::Green),
+        LineSegment::from_points((2.0, 1.0), (-2.0, 1.0), Color::White),
+        LineSegment::from_points((-2.0, 1.0), (-2.0, 5.0), Color::Magenta),
+        LineSegment::from_points((-2.0, 5.0), (2.0, 5.0), Color::Green),
+        LineSegment::from_points((2.0, 5.0), (2.0, 1.0), Color::Yellow),
     ];
     let mut position = (0.0, 0.0);
     let mut rotation = 3.0 * PI / 4.0;
