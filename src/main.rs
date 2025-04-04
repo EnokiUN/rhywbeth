@@ -199,10 +199,13 @@ fn main() -> Result<()> {
         let size = size()?;
         match event::read().unwrap() {
             Event::Mouse(evt) => match evt.kind {
-                MouseEventKind::Moved => {
+                MouseEventKind::Down(_) => {
+                    last_mouse_position = Some(evt.column);
+                }
+                MouseEventKind::Drag(_) => {
                     render(size, position, &mut rotation, &segments)?;
                     if let Some(pos) = last_mouse_position {
-                        rotation += (evt.column as i32 - pos as i32) as f32 * 0.01;
+                        rotation -= (evt.column as i32 - pos as i32) as f32 * 0.01;
                     }
                     last_mouse_position = Some(evt.column);
                 }
