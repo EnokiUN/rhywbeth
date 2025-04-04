@@ -183,13 +183,13 @@ fn main() -> Result<()> {
     execute!(stdout(), EnableMouseCapture, Hide, DisableLineWrap).unwrap();
 
     let segments = vec![
-        LineSegment::from_points((6.0, 1.0), (4.0, 3.0), Color::Black),
-        LineSegment::from_points((4.0, 3.0), (7.0, 5.0), Color::Magenta),
-        LineSegment::from_points((7.0, 5.0), (6.0, 1.0), Color::Green),
-        LineSegment::from_points((2.0, 1.0), (-2.0, 1.0), Color::White),
-        LineSegment::from_points((-2.0, 1.0), (-2.0, 5.0), Color::Magenta),
-        LineSegment::from_points((-2.0, 5.0), (2.0, 5.0), Color::Green),
-        LineSegment::from_points((2.0, 5.0), (2.0, 1.0), Color::Yellow),
+        LineSegment::from_points((6.0, 6.0), (4.0, 8.0), Color::Black),
+        LineSegment::from_points((4.0, 8.0), (7.0, 10.0), Color::Magenta),
+        LineSegment::from_points((7.0, 10.0), (6.0, 6.0), Color::Green),
+        LineSegment::from_points((2.0, 6.1), (-2.0, 6.0), Color::White),
+        LineSegment::from_points((-2.0, 6.0), (-2.0, 10.0), Color::Magenta),
+        LineSegment::from_points((-2.0, 10.0), (2.0, 10.0), Color::Green),
+        LineSegment::from_points((2.0, 10.0), (2.0, 6.0), Color::Yellow),
     ];
     let mut position = (0.0, 0.0);
     let mut rotation = 3.0 * PI / 4.0;
